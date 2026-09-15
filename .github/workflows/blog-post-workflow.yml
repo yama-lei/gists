@@ -1,4 +1,4 @@
-name: Update Blog Posts
+name: Update Gist Blog
 
 on:
   schedule:
@@ -16,38 +16,234 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Update blog posts from Gists
+      # Use blog-post-workflow only as an RSS/Atom parser.
+      # It writes parsed posts to:
+      # /tmp/blog_post_workflow_output.json
+      - name: Fetch Gists
         uses: gautamkrishnar/blog-post-workflow@v1
         with:
           feed_list: "https://gist.github.com/yama-lei.atom"
-
-          max_post_count: 10
-
-          # Only keep blog-like Gists and remove their type prefix.
-          # Supported:
-          #   [tech]
-          #   [note]
-          #   [thinking]
-          #   [post]
-          # Case-insensitive.
-          item_exec: |
-            const prefix = /^\[(tech|note|thinking|post)\]\s*/i;
-
-            if (!post.title || !prefix.test(post.title)) {
-              post = null;
-            } else {
-              post.title = post.title.replace(prefix, "");
-            }
-
-          # IMPORTANT:
-          # Add newlines around BLOG-POST-LIST markers so that
-          # GitHub parses the generated content as Markdown.
-          tag_post_pre_newline: true
-
-          template: '- `$date` [$title]($url)$newline'
-
-          date_format: "yyyy-mm-dd"
-
-          commit_message: "docs: update blog posts"
-
+          max_post_count: 1000
+          output_only: true
           enable_keepalive: false
+
+          # Keep original characters so we can process titles ourselves.
+          disable_html_encoding: true
+
+      - name: Generate tagged blog index
+        shell: python
+        run: |
+          import json
+          import re
+          from pathlib import Path
+          from collections import OrderedDict
+
+
+          README = Path("README.md")
+          OUTPUT = Path("/tmp/blog_post_workflow_output.json")
+
+          START = "<!-- BLOG-POST-LIST:START -->"
+          END = "<!-- BLOG-POST-LIST:END -->"
+
+
+          # ------------------------------------------------------------
+          # Load posts
+          # ------------------------------------------------------------
+
+          if OUTPUT.exists():
+              posts = json.loads(OUTPUT.read_text(encoding="utf-8"))
+          else:
+              posts = []
+
+
+          # ------------------------------------------------------------
+          # Helpers
+          # ------------------------------------------------------------
+
+          # Examples:
+          #
+          # [tech] xxx
+          # [tech, thinking] xxx
+          # [linux, note] xxx
+          #
+          # Everything inside [...] is treated as tags.
+          TAG_PATTERN = re.compile(
+              r"^\[([^\[\]]+)\]\s*(.+)$",
+              re.DOTALL,
+          )
+
+
+          def escape_markdown(text: str) -> str:
+              """Escape characters that can break Markdown link text."""
+              return (
+                  text
+                  .replace("\\", "\\\\")
+                  .replace("[", "\\[")
+                  .replace("]", "\\]")
+                  .replace("\n", " ")
+                  .strip()
+              )
+
+
+          def display_tag(tag: str) -> str:
+              """tech -> Tech; thinking -> Thinking; 中文 unchanged."""
+              tag = tag.strip()
+
+              if not tag:
+                  return tag
+
+              return tag[0].upper() + tag[1:]
+
+
+          # ------------------------------------------------------------
+          # Parse tags
+          # ------------------------------------------------------------
+
+          groups = OrderedDict()
+
+          for post in posts:
+              raw_title = (post.get("title") or "").strip()
+
+              match = TAG_PATTERN.match(raw_title)
+
+              # Gists without [...] prefix are not blog posts.
+              if not match:
+                  continue
+
+              raw_tags = match.group(1)
+              title = match.group(2).strip()
+
+              if not title:
+                  continue
+
+              # Support:
+              #
+              # [tech, thinking]
+              # [tech，thinking]
+              #
+              tags = [
+                  tag.strip()
+                  for tag in re.split(r"[,，]", raw_tags)
+                  if tag.strip()
+              ]
+
+              if not tags:
+                  continue
+
+              url = post.get("url", "")
+              date = str(post.get("date", ""))[:10]
+
+              # Prevent:
+              # [tech, Tech] xxx
+              # from appearing twice in the same category.
+              seen_tags = set()
+
+              for tag in tags:
+                  key = tag.casefold()
+
+                  if key in seen_tags:
+                      continue
+
+                  seen_tags.add(key)
+
+                  if key not in groups:
+                      groups[key] = {
+                          "name": display_tag(tag),
+                          "posts": [],
+                      }
+
+                  groups[key]["posts"].append({
+                      "title": title,
+                      "url": url,
+                      "date": date,
+                  })
+
+
+          # ------------------------------------------------------------
+          # Generate Markdown
+          # ------------------------------------------------------------
+
+          sections = []
+
+          # Sort categories alphabetically for deterministic output.
+          for key in sorted(groups, key=lambda k: groups[k]["name"].casefold()):
+              group = groups[key]
+
+              lines = [
+                  f"## {escape_markdown(group['name'])}",
+                  "",
+              ]
+
+              for post in group["posts"]:
+                  title = escape_markdown(post["title"])
+                  url = post["url"]
+                  date = post["date"]
+
+                  if date:
+                      lines.append(
+                          f"- `{date}` [{title}]({url})"
+                      )
+                  else:
+                      lines.append(
+                          f"- [{title}]({url})"
+                      )
+
+              sections.append("\n".join(lines))
+
+
+          if sections:
+              generated = "\n\n".join(sections)
+          else:
+              generated = "_No tagged Gists yet._"
+
+
+          # ------------------------------------------------------------
+          # Update README
+          # ------------------------------------------------------------
+
+          readme = README.read_text(encoding="utf-8")
+
+          pattern = re.compile(
+              re.escape(START)
+              + r".*?"
+              + re.escape(END),
+              re.DOTALL,
+          )
+
+          replacement = (
+              START
+              + "\n\n"
+              + generated
+              + "\n\n"
+              + END
+          )
+
+          new_readme, count = pattern.subn(
+              lambda _: replacement,
+              readme,
+              count=1,
+          )
+
+          if count != 1:
+              raise RuntimeError(
+                  "Cannot find BLOG-POST-LIST markers in README.md"
+              )
+
+          README.write_text(
+              new_readme,
+              encoding="utf-8",
+          )
+
+      - name: Commit changes
+        run: |
+          if git diff --quiet README.md; then
+            echo "README is already up to date."
+            exit 0
+          fi
+
+          git config user.name "blog-post-bot"
+          git config user.email "blog-post-bot@example.com"
+
+          git add README.md
+          git commit -m "docs: update Gist blog"
+          git push
