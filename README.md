@@ -2,6 +2,7 @@
 
 ## Note
 
+- `2026-09-15` [vibe coding 的教训](https://gist.github.com/yama-lei/4188d68bcd288c09bbe3fbf08671a006)
 - `2026-09-15` [对于社会戾气的思考 （尚未完成）](https://gist.github.com/yama-lei/aa4cac08b9dc954b4cec9d964202a159)
 
 ## Script
