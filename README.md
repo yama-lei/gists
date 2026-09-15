@@ -1,5 +1,3 @@
-## Gists
-
 <!-- BLOG-POST-LIST:START -->
 
 ## Note
