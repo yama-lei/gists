@@ -1,0 +1,49 @@
+name: Update Blog Posts
+
+on:
+  # 每 15 分钟同步一次
+  schedule:
+    - cron: "*/15 * * * *"
+
+  # 允许在 Actions 页面手动触发
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-readme:
+    name: Update README with latest Gist posts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Update blog posts
+        uses: gautamkrishnar/blog-post-workflow@1.9.6
+        with:
+          feed_list: "https://gist.github.com/yama-lei.atom"
+          max_post_count: 100
+          # 只有这些标题前缀才算博客：
+          #
+          # [tech] xxx
+          # [note] xxx
+          # [thinking] xxx
+          # [post] xxx
+          item_exec: |
+            if (
+              !post.title ||
+              !/^\[(tech|note|thinking|post)\]\s+/.test(post.title)
+            ) {
+              post = null;
+            }
+
+          # README 中的展示格式
+          template: "- `$date` [$title]($url)$newline"
+          date_format: "UTC:yyyy-mm-dd"
+
+          commit_message: "docs: update blog posts"
+          committer_username: "yama-lei"
+          committer_email: "no-reply@rayama.site"
+          enable_keepalive: false
