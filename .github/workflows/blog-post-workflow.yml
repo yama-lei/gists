@@ -3,7 +3,6 @@ name: Update Blog Posts
 on:
   schedule:
     - cron: "*/15 * * * *"
-
   workflow_dispatch:
 
 permissions:
@@ -24,14 +23,13 @@ jobs:
 
           max_post_count: 10
 
-          # Only keep:
-          # [tech] ...
-          # [note] ...
-          # [thinking] ...
-          # [post] ...
-          #
-          # Matching is case-insensitive.
-          # The prefix is removed before writing to README.
+          # Only keep blog-like Gists and remove their type prefix.
+          # Supported:
+          #   [tech]
+          #   [note]
+          #   [thinking]
+          #   [post]
+          # Case-insensitive.
           item_exec: |
             const prefix = /^\[(tech|note|thinking|post)\]\s*/i;
 
@@ -41,7 +39,12 @@ jobs:
               post.title = post.title.replace(prefix, "");
             }
 
-          template: "- `$date` [$title]($url)$newline"
+          # IMPORTANT:
+          # Add newlines around BLOG-POST-LIST markers so that
+          # GitHub parses the generated content as Markdown.
+          tag_post_pre_newline: true
+
+          template: '- `$date` [$title]($url)$newline'
 
           date_format: "yyyy-mm-dd"
 
