@@ -1,11 +1,9 @@
 name: Update Blog Posts
 
 on:
-  # 每 15 分钟同步一次
   schedule:
     - cron: "*/15 * * * *"
 
-  # 允许在 Actions 页面手动触发
   workflow_dispatch:
 
 permissions:
@@ -13,37 +11,40 @@ permissions:
 
 jobs:
   update-readme:
-    name: Update README with latest Gist posts
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Update blog posts
-        uses: gautamkrishnar/blog-post-workflow@1.9.6
+      - name: Update blog posts from Gists
+        uses: gautamkrishnar/blog-post-workflow@v1
         with:
           feed_list: "https://gist.github.com/yama-lei.atom"
-          max_post_count: 100
-          # 只有这些标题前缀才算博客：
+
+          max_post_count: 10
+
+          # Only keep:
+          # [tech] ...
+          # [note] ...
+          # [thinking] ...
+          # [post] ...
           #
-          # [tech] xxx
-          # [note] xxx
-          # [thinking] xxx
-          # [post] xxx
+          # Matching is case-insensitive.
+          # The prefix is removed before writing to README.
           item_exec: |
-            if (
-              !post.title ||
-              !/^\[(tech|note|thinking|post)\]\s+/.test(post.title)
-            ) {
+            const prefix = /^\[(tech|note|thinking|post)\]\s*/i;
+
+            if (!post.title || !prefix.test(post.title)) {
               post = null;
+            } else {
+              post.title = post.title.replace(prefix, "");
             }
 
-          # README 中的展示格式
           template: "- `$date` [$title]($url)$newline"
-          date_format: "UTC:yyyy-mm-dd"
+
+          date_format: "yyyy-mm-dd"
 
           commit_message: "docs: update blog posts"
-          committer_username: "yama-lei"
-          committer_email: "no-reply@rayama.site"
+
           enable_keepalive: false
