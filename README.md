@@ -19,4 +19,9 @@
 
 - `2026-09-22` [让本科回归本科](https://gist.github.com/yama-lei/c51cfe18b89bfc3ed36b994bc4d28c31)
 
+## 纯水
+
+- `2026-09-23` [Some memes](https://gist.github.com/yama-lei/e490c8643896a88e92867c2c827f1b89)
+- `2026-09-23` [GPT6 是真的AGI](https://gist.github.com/yama-lei/a59345b3871eddb13d63fe9200cd5027)
+
 <!-- BLOG-POST-LIST:END -->
